@@ -165,6 +165,7 @@ libvirt:
   uri: "qemu:///system"
   bridge: "${BRIDGE}"
   storage_pool: "localnode"
+  machine: "q35"
 
 limits:
   max_vcpus: 0

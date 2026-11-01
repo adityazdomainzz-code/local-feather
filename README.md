@@ -56,6 +56,12 @@ curl -s http://127.0.0.1:8443/health
 curl -s -H "Authorization: Bearer <TOKEN>" http://127.0.0.1:8443/api/v1/host | jq
 ```
 
+**Notes after recent fixes:**
+- Domain XML now uses a configurable machine type (default `q35`) for broader QEMU compatibility.
+- Network parameter is honored (bridge vs libvirt network).
+- Instance create cleans up partial disks if domain definition fails.
+- Status is synced from libvirt on agent startup.
+
 ---
 
 ## Panel integration checklist

@@ -32,6 +32,8 @@ libvirt:
   bridge: "virbr0"
   # Default storage pool name
   storage_pool: "localnode"
+  # QEMU machine type (q35 is widely available; override if needed)
+  machine: "q35"
 
 limits:
   # Hard caps for this host (agent will refuse over-allocation beyond these)

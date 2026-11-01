@@ -209,6 +209,23 @@ class LibvirtManager:
                     self._instances[spec.uuid] = spec
                 except Exception as e:
                     logger.warning("Failed to load instance meta %s: %s", meta, e)
+        # best-effort status sync after load
+        self._sync_statuses()
+
+    def _sync_statuses(self) -> None:
+        if libvirt is None:
+            return
+        try:
+            self.connect()
+        except Exception:
+            return
+        for uid, spec in list(self._instances.items()):
+            try:
+                dom = self._get_domain(uid)
+                spec.status = "running" if dom.isActive() else "stopped"
+                self._save_instance(spec)
+            except Exception:
+                spec.status = "unknown"
 
     def _save_instance(self, spec: InstanceSpec) -> None:
         inst_dir = self.instances_dir / spec.uuid
@@ -228,6 +245,26 @@ class LibvirtManager:
       <target dev='hda' bus='ide'/>
       <readonly/>
     </disk>"""
+
+        # Prefer a widely available machine type; allow override in config
+        machine = self.config.get("libvirt", {}).get("machine", "q35")
+
+        # Network: if the requested network looks like a bridge name use bridge,
+        # otherwise treat it as a libvirt network name.
+        net = spec.network or self.bridge
+        if net == self.bridge or net.startswith("br") or net.startswith("virbr"):
+            iface_xml = f"""
+    <interface type='bridge'>
+      <source bridge='{net}'/>
+      <model type='virtio'/>
+    </interface>"""
+        else:
+            iface_xml = f"""
+    <interface type='network'>
+      <source network='{net}'/>
+      <model type='virtio'/>
+    </interface>"""
+
         return f"""<domain type='kvm'>
   <name>{spec.name}</name>
   <uuid>{spec.uuid}</uuid>
@@ -235,7 +272,7 @@ class LibvirtManager:
   <currentMemory unit='MiB'>{spec.memory_mb}</currentMemory>
   <vcpu placement='static'>{spec.vcpus}</vcpu>
   <os>
-    <type arch='x86_64' machine='pc-q35-8.2'>hvm</type>
+    <type arch='x86_64' machine='{machine}'>hvm</type>
     <boot dev='hd'/>
     <boot dev='cdrom'/>
   </os>
@@ -255,10 +292,7 @@ class LibvirtManager:
       <source file='{disk_path}'/>
       <target dev='vda' bus='virtio'/>
     </disk>{iso_xml}
-    <interface type='bridge'>
-      <source bridge='{self.bridge}'/>
-      <model type='virtio'/>
-    </interface>
+{iface_xml}
     <console type='pty'/>
     <graphics type='vnc' port='{vnc_port}' listen='0.0.0.0' passwd=''>
       <listen type='address' address='0.0.0.0'/>
@@ -334,8 +368,21 @@ class LibvirtManager:
 
         # allocate VNC port (5900+)
         used_ports = {i.vnc_port for i in self._instances.values() if i.vnc_port}
+        # also consider ports already defined in libvirt if connected
+        try:
+            for dom in self.conn.listAllDomains():
+                try:
+                    xml = dom.XMLDesc(0)
+                    m = re.search(r"port='(\d+)'", xml)
+                    if m:
+                        used_ports.add(int(m.group(1)))
+                except Exception:
+                    pass
+        except Exception:
+            pass
+
         vnc_port = 5900
-        while vnc_port in used_ports:
+        while vnc_port in used_ports or vnc_port < 5900:
             vnc_port += 1
 
         spec = InstanceSpec(
@@ -355,7 +402,14 @@ class LibvirtManager:
 
         xml = self._build_domain_xml(spec, disk_path, iso_path)
         (inst_dir / "domain.xml").write_text(xml)
-        self.conn.defineXML(xml)
+        try:
+            self.conn.defineXML(xml)
+        except Exception as e:
+            # clean up partial instance on define failure
+            logger.error("Failed to define domain: %s", e)
+            shutil.rmtree(inst_dir, ignore_errors=True)
+            raise RuntimeError(f"Failed to define VM domain: {e}") from e
+
         self._save_instance(spec)
         self._instances[inst_uuid] = spec
         logger.info("Created instance %s (%s)", safe_name, inst_uuid)

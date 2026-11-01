@@ -43,6 +43,8 @@ In `VmNodesController` create/update handlers:
   - Do **not** require Proxmox `user` / `token_id` / `secret`
 - Else keep existing Proxmox validation.
 
+An example route file is provided at `panel/backend/routes/admin/vm-nodes-local.php`. Include or merge it into your admin router.
+
 ## 3. Instance create path
 
 Wherever VMs are provisioned (typically user order flow or admin “create VDS”), branch:
