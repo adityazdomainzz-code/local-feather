@@ -1,0 +1,51 @@
+# LocalNode Agent Configuration
+# Copy to /etc/localnode/config.yaml and adjust
+
+server:
+  host: "0.0.0.0"
+  port: 8443
+  # TLS is recommended in production
+  tls:
+    enabled: false
+    cert: "/etc/localnode/tls/cert.pem"
+    key: "/etc/localnode/tls/key.pem"
+
+auth:
+  # Shared secret used by FeatherPanel to authenticate (Bearer token)
+  # Generate with: openssl rand -hex 32
+  token: "dev-localnode-token-change-me"
+  # Optional: restrict to panel IPs
+  allowed_ips: []
+
+paths:
+  # Where VM disks and configs live
+  data_dir: "/var/lib/localnode"
+  images_dir: "/var/lib/localnode/images"
+  instances_dir: "/var/lib/localnode/instances"
+  iso_dir: "/var/lib/localnode/iso"
+  templates_dir: "/var/lib/localnode/templates"
+  logs_dir: "/var/log/localnode"
+
+libvirt:
+  uri: "qemu:///system"
+  # Network bridge for VMs (must exist)
+  bridge: "virbr0"
+  # Default storage pool name
+  storage_pool: "localnode"
+
+limits:
+  # Hard caps for this host (agent will refuse over-allocation beyond these)
+  max_vcpus: 0          # 0 = detect from host
+  max_memory_mb: 0      # 0 = detect from host
+  max_disk_gb: 0        # 0 = detect free space
+  overcommit_cpu: 2.0   # allow 2x vCPU overcommit
+  overcommit_memory: 1.2
+
+heartbeat:
+  interval_seconds: 30
+  panel_url: ""         # optional: push status to panel
+  panel_token: ""
+
+logging:
+  level: "INFO"
+  file: "/var/log/localnode/agent.log"
